@@ -17,7 +17,7 @@ const text = `This is a text
 
 test.beforeEach(async (t) => {
     const server = createServer();
-    const requester = new Requester();
+    const requester = new Requester({}, 4);
 
     await server.start();
 
@@ -167,4 +167,37 @@ test(`Requester follows all hops, reports the right number and returns the final
 
     t.is(response.hops.length, Object.keys(hopsServerConfig).length - 1);
     t.is(response.body.content, hopsServerConfig['/']);
+});
+
+test(`Throws an error if number of hops exceeds the redirect limit`, async (t) => {
+    const { requester, server } = t.context;
+    const extraHopsServerConfig = Object.assign({}, hopsServerConfig);
+
+    extraHopsServerConfig['/hop308'] = {
+        content: '/hop301-2',
+        status: 308
+    };
+
+    extraHopsServerConfig['/hop301-2'] = {
+        content: '/',
+        status: 301
+    };
+
+    server.configure(extraHopsServerConfig);
+
+    const error = await t.throws(requester.get(`http://localhost:${server.port}/hop301`));
+
+    t.is(error, 'The number of redirects(5) exceeds the limit(4).');
+});
+
+test(`Aborts the request if it exceeds the time limit`, async (t) => {
+    const { requester, server } = t.context;
+    const timeOutServerConfig = { '/timeout': { content: 'timeout' } };
+
+    server.configure(timeOutServerConfig);
+
+    const { error, uri } = await t.throws(requester.get(`http://localhost:${server.port}/timeout`));
+
+    t.is(error.code, 'ESOCKETTIMEDOUT');
+    t.is(uri, 'http://localhost:3058/timeout');
 });

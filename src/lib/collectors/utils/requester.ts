@@ -31,7 +31,8 @@ const defaults = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
     },
     jar: true,
-    time: true
+    time: true,
+    timeout: 3000
 };
 
 export class Requester {
@@ -41,11 +42,14 @@ export class Requester {
     private _request: request;
     /** Internal `redirectManager`. */
     private _redirects = new RedirectManager();
+    /** Maximum number of redirects */
+    private _limit;
 
-    constructor(customOptions = {}) {
+    constructor(customOptions = {}, redirectsLimit = 3) {
         const options = Object.assign({}, defaults, customOptions);
 
         this._request = request.defaults(options);
+        this._limit = redirectsLimit;
     }
 
     /** Return the redirects for a given `uri`. */
@@ -80,6 +84,12 @@ export class Requester {
                     const newUri = url.resolve(uri, response.headers.location);
 
                     this._redirects.add(newUri, uri);
+
+                    const currentRedirectNumber = this._redirects.calculate(uri).length;
+
+                    if (currentRedirectNumber > this._limit) {
+                        reject(`The number of redirects(${currentRedirectNumber}) exceeds the limit(${this._limit}).`);
+                    }
 
                     try {
                         debug(`Redirect found for ${uri}`);
